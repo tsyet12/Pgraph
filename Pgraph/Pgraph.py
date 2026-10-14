@@ -114,7 +114,7 @@ class Pgraph():
         ax.set_title("Original Problem ",y=titlepos)
         return ax
     
-    def create_solver_input(self,path=None):
+    def create_solver_input(self,path=None,**additional_arguments):
         '''
         create_solver_input()
         
@@ -123,9 +123,16 @@ class Pgraph():
         
         Arguments
         path: (string) Path of folder to generate the input file in (does not fontain file name, only folder location). If None, then the default library installation path will be used.
+        additional_argunments: (object or list of objects) Used to define additional data that needs to be put at the end of the P-graph solver input file
+                               "max_capacity"= Maximum default capacity of units (O-type nodes)
+                               "max_flowrate_upper_bound"= Maximum default value for upper bound in M-type nodes
 
         '''
+        default_max_value=1000000000
+        max_capacity= str(additional_arguments["max_capacity"]) if "max_capacity" in additional_arguments.keys() else default_max_value
+        max_material_flowrate_upperbound= str(additional_arguments["max_flowrate_upper_bound"]) if "max_flowrate_upper_bound" in additional_arguments.keys() else default_max_value
 
+            
         G=self.G
         ME=self.ME
         if path==None:
@@ -143,10 +150,10 @@ class Pgraph():
         'defaults:','\n',
         'material_type=raw_material','\n',
         'material_flow_rate_lower_bound=0','\n',
-        'material_flow_rate_upper_bound=10000000','\n',
+        'material_flow_rate_upper_bound={}'.format(max_material_flowrate_upperbound),'\n',
         'material_price=0','\n',
         'operating_unit_capacity_lower_bound=0','\n',
-        'operating_unit_capacity_upper_bound=10000000','\n',
+        'operating_unit_capacity_upper_bound={}'.format(max_capacity),'\n',
         'operating_unit_fix_cost=0','\n',
         'operating_unit_proportional_cost=0','\n',
         '\n',
@@ -663,7 +670,7 @@ class Pgraph():
         
         return ax
     
-    def to_studio(self, path=None,file_name="studio_file.pgsx",verbose=False):
+    def to_studio(self, path=None,file_name="studio_file.pgsx",verbose=False,**additional_params):
         '''
         to_studio(path=None,file_name="studio_file.pgsx",verbose=False)
         
@@ -674,7 +681,17 @@ class Pgraph():
         path: (string)(optional) Path of the expected output file. Default path is the directory of the file.
         file_name: (string)(optional) Name of the file. Default is "studio_file.pgsx"
         verbose: (boolean) Whether to print the content of the file.       
-        
+        additional_params: Arbitrary named arguments. Each will be forwarded to the solver executable. Example: option="value" will be forwarded as --option "value".
+                             Dictiionary to pass additional features into P-graph studio:
+            "payout_period": (In progress)
+            "money_units" : Monetary units to be shown
+            "color_nodes": Color of nodes to be shown in P-graph Studio as dictionary of integer codes of color
+                        color_nodes[node]=Int code of color
+            "color_edges":Color of edges to be shown in P-graph Studio as dictionary of integer codes of color
+                        color_edges[(e1,e2)]=Int code of color
+            "max_capacity"= Maximum default capacity of units (O-type nodes)
+            "max_flowrate_upper_bound"= Maximum default value for upper bound in M-type nodes 
+            
         '''
         
         G=self.G
@@ -698,13 +715,15 @@ class Pgraph():
 
         #Default
         Default=etree.SubElement(PGraph,"Default")
-
+        default_max_capacity="1000000000"
+        default_payout_period="10"
+        
         ##Default Material
         Def_Material=etree.SubElement(Default,"Material")
         DM_FRLB=etree.SubElement(Def_Material,"FlowRateLowerBound")
         DM_FRLB.text="0"
         DM_FRUP=etree.SubElement(Def_Material,"FlowRateUpperBound")
-        DM_FRUP.text="1000000000"
+        DM_FRUP.text=str(additional_params["max_flowrate_upper_bound"]) if "max_flowrate_upper_bound" in additional_params.keys() else default_max_capacity
         DM_Price=etree.SubElement(Def_Material,"Price")
         DM_Price.text="0"
         DM_Type=etree.SubElement(Def_Material,"Type")
@@ -734,9 +753,9 @@ class Pgraph():
         DO_CLB=etree.SubElement(Def_Op,"CapacityLowerBound")
         DO_CLB.text="0"
         DO_CUB=etree.SubElement(Def_Op,"CapacityUpperBound")
-        DO_CUB.text="1000000000"
+        DO_CUB.text=str(additional_params["max_capacity"]) if "max_capacity" in additional_params.keys() else default_max_capacity
         DO_PP=etree.SubElement(Def_Op,"PaybackPeriod")
-        DO_PP.text="10"
+        DO_PP.text=str(additional_params["payout_period"]) if "payout_period" in additional_params.keys() else default_payout_period
         DO_WHPY=etree.SubElement(Def_Op,"WorkingHoursPerYear")
         DO_WHPY.text="8000"
         DO_FOT=etree.SubElement(Def_Op,"FixOperTime")
@@ -764,7 +783,9 @@ class Pgraph():
         DQ_QT=etree.SubElement(Def_Q,"quant_type")
         DQ_QT.text="Mass"
         DQ_MM=etree.SubElement(Def_Q,"money_mu")
-        DQ_MM.text="EUR"
+        DQ_MM.text=str(additional_params["money_units"]) if "money_units" in additional_params.keys() else "EUR"
+
+
 
         ## SolverParameter
         DEF_SP=etree.SubElement(Default,"SolverParameter")
@@ -778,6 +799,10 @@ class Pgraph():
         DS_TCLB.text="-1000000000"
         DS_TCUB=etree.SubElement(DEF_SP,"TotalCostUpperBound")
         DS_TCUB.text="1000000000"
+        
+        #Color_nodes
+        color_nodes= additional_params["color_nodes"] if "color_nodes" in additional_params.keys() else dict() 
+        color_edges=  additional_params["color_edges"] if "color_edges" in additional_params.keys() else dict() 
 
         # Materials
         Materials=etree.SubElement(PGraph,"Materials")
@@ -816,6 +841,8 @@ class Pgraph():
                     etree.SubElement(MPar_list[-1],'Parameter',attrib={"Name":"measurementunit", "Prefix":"Measurement unit: ", "Value":"gram (g)", "Visible":"false"})
                     
                     etree.SubElement(Mats_list[-1], 'Label',attrib={"Text":G.nodes()[n]["names"]})
+                    if n in color_nodes.keys():
+                        node_color=etree.SubElement(Mats_list[-1],"Color").text=str(color_nodes[n])
         # Edges
         Edges=etree.SubElement(PGraph,"Edges")
 
@@ -843,7 +870,7 @@ class Pgraph():
                     Y_list[-1].text="0"
                     etree.SubElement(label_list[-1],"FontSize").text="-1"
                     etree.SubElement(label_list[-1],"Color").text="-16777216"
-                    etree.SubElement(edge_list[-1],'Color').text="-16777216"
+                    etree.SubElement(edge_list[-1],'Color').text=str(color_edges[(e[0],e[1])]) if (e[0],e[1])  in color_edges.keys() else "-16777216"               
                     etree.SubElement(edge_list[-1],'LongFormat').text="false"
                     etree.SubElement(edge_list[-1],'Comment') #hanging
                     etree.SubElement(edge_list[-1],'CommentVisible').text="false"
@@ -863,7 +890,7 @@ class Pgraph():
                     Y_list[-1].text="0"
                     etree.SubElement(label_list[-1],"FontSize").text="-1"
                     etree.SubElement(label_list[-1],"Color").text="-16777216"
-                    etree.SubElement(edge_list[-1],'Color').text="-16777216"
+                    etree.SubElement(edge_list[-1],'Color').text=str(color_edges[(f[0],f[1])]) if (f[0],f[1])  in color_edges.keys() else "-16777216"
                     etree.SubElement(edge_list[-1],'LongFormat').text="false"
                     etree.SubElement(edge_list[-1],'Comment') #hanging
                     etree.SubElement(edge_list[-1],'CommentVisible').text="false"
@@ -907,6 +934,8 @@ class Pgraph():
                 etree.SubElement(OPar_list[-1],'Parameter',attrib={"Name":"payoutperiod", "Prefix":"Payout Period: ", "Value":"-1", "Visible":"false"})
                 
                 etree.SubElement(opu_list[-1], 'Label',attrib={"Text":G.nodes()[n]["names"]})
+                if n in color_nodes.keys():
+                    node_color=etree.SubElement(opu_list[-1],"Color").text=str(color_nodes[n])
         # MutualExclusions
         MutualExclusions=etree.SubElement(PGraph,"MutualExclusions")
 
